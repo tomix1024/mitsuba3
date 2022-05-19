@@ -55,11 +55,14 @@ Depending on how it is used, its value can either be a scalar or a color spectru
 template <typename Float, typename Spectrum>
 class ConstVolume final : public Volume<Float, Spectrum> {
 public:
-    MI_IMPORT_BASE(Volume, m_to_local)
+    MI_IMPORT_BASE(Volume, m_to_local, m_bbox)
     MI_IMPORT_TYPES(Texture)
 
     ConstVolume(const Properties &props) : Base(props) {
         m_value = props.texture<Texture>("value", 1.f);
+        if (m_value->is_spatially_varying())
+            Throw("The value given to ConstVolume should not be spatially-varying.");
+        update_max();
     }
 
     void traverse(TraversalCallback *callback) override {
@@ -81,20 +84,45 @@ public:
         return m_value->mean();
     }
 
-    ScalarFloat max() const override { return m_value->max(); }
+    ScalarFloat max() const override {
+        return m_max;
+    }
+
+    void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
+        update_max();
+    }
 
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "ConstVolume[" << std::endl
-            << "  to_local = " << string::indent(m_to_local, 13) << "," << std::endl
-            << "  value = " << string::indent(m_value, 4) << std::endl
+            << "  to_local = " << string::indent(m_to_local) << "," << std::endl
+            << "  bbox = " << string::indent(m_bbox) << ","  << std::endl
+            << "  value = " << string::indent(m_value) << std::endl
             << "]";
         return oss.str();
     }
 
     MI_DECLARE_CLASS()
 protected:
+    void update_max() {
+        // It should be okay to query with a fake surface interaction,
+        // since the "texture" is just a constant value.
+        SurfaceInteraction3f si = dr::zeros<SurfaceInteraction3f>();
+        si.wavelengths =
+            Wavelength(0.5f * (MI_CIE_MAX - MI_CIE_MIN) + MI_CIE_MIN);
+        Spectrum result = m_value->eval(si);
+        // TODO: use better syntax for this
+        Float tmp = dr::mean(dr::mean(dr::detach(result)));
+        if constexpr (dr::is_jit_v<Float>)
+            m_max = tmp[0];
+        else
+            m_max = tmp;
+    }
+
+
+protected:
     ref<Texture> m_value;
+    ScalarFloat m_max;
 };
 
 MI_IMPLEMENT_CLASS_VARIANT(ConstVolume, Volume)

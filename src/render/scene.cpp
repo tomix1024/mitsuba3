@@ -77,10 +77,26 @@ MI_VARIANT Scene<Float, Spectrum>::Scene(const Properties &props) {
 
     m_emitters_dr = dr::load<DynamicBuffer<EmitterPtr>>(
         m_emitters.data(), m_emitters.size());
+    m_sensors_dr = dr::load<DynamicBuffer<SensorPtr>>(
+        m_sensors.data(), m_sensors.size());
 
     m_emitter_pmf = m_emitters.empty() ? 0.f : (1.f / m_emitters.size());
 
     m_shapes_grad_enabled = false;
+
+    m_use_bbox_fast_path = props.get<bool>("use_bbox_fast_path", false);
+    if (m_use_bbox_fast_path) {
+        if (m_shapes.size() > 1)
+            Throw("Attempted to enable bbox fast path, but there were %s > 1 "
+                  "shapes in the scene.",
+                  m_shapes.size());
+#if !defined(MI_OPTIX_ENABLE_BBOX_FASTPATH)
+        Throw("Attempted to enable bbox fast path, but the compile-time option "
+              "`MI_OPTIX_ENABLE_BBOX_FASTPATH` was disabled.");
+#endif
+    }
+    Log(Info, "Ray tracing: bbox fast path %s",
+        (m_use_bbox_fast_path ? "enabled" : "disabled"));
 }
 
 MI_VARIANT Scene<Float, Spectrum>::~Scene() {
