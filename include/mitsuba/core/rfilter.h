@@ -4,6 +4,7 @@
 #include <mitsuba/core/object.h>
 #include <mitsuba/core/math.h>
 #include <mitsuba/core/logger.h>
+#include <limits>
 
 NAMESPACE_BEGIN(mitsuba)
 
