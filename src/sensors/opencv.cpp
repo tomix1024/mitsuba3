@@ -55,13 +55,13 @@ public:
         ScalarVector2i size = m_film->size();
 
         m_focal_lengths = ScalarPoint2f(
-            props.get<Float>("fx", 1.f),
-            props.get<Float>("fy", 1.f)
+            props.get<ScalarFloat>("fx", 1.f),
+            props.get<ScalarFloat>("fy", 1.f)
         );
 
         m_principal_point = ScalarPoint2f(
-            props.get<Float>("cx", 0.f),
-            props.get<Float>("cy", 0.f)
+            props.get<ScalarFloat>("cx", 0.f),
+            props.get<ScalarFloat>("cy", 0.f)
         );
 
         if (m_to_world.scalar().has_scale())
