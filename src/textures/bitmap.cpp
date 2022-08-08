@@ -486,9 +486,9 @@ public:
         // Account for internal `to_uv` transformation
         sample2 = m_transform.inverse().transform_affine(sample2);
         // TODO precompoute jacobian determinant
-        pdf *= dr::abs(dr::det(Matrix3f( m_transform.matrix )));
+        Float dtransform = dr::abs(dr::det(Matrix3f( m_transform.matrix )));
 
-        return { sample2, pdf * dr::prod(res) };
+        return { sample2, pdf * dr::prod(res) * dtransform };
     }
 
     Float pdf_position(const Point2f &pos_, Mask active = true) const override {
@@ -498,10 +498,15 @@ public:
         if (!m_distr2d)
             init_distr();
 
+        // Account for internal `to_uv` transformation
+        Point2f pos = m_transform.transform_affine(pos_);
+        // TODO precompoute jacobian determinant
+        Float dtransform = dr::abs(dr::det(Matrix3f( m_transform.matrix )));
+
         ScalarVector2i res = resolution();
         if (m_texture.filter_mode() == dr::FilterMode::Linear) {
             // Scale to bitmap resolution and apply shift
-            Point2f uv = dr::fmadd(pos_, res, -.5f);
+            Point2f uv = dr::fmadd(pos, res, -.5f);
 
             // Integer pixel positions for bilinear interpolation
             Vector2i uv_i = dr::floor2int<Vector2i>(uv);
@@ -522,15 +527,15 @@ public:
             Float v0 = dr::fmadd(w0.x(), v00, w1.x() * v10),
                   v1 = dr::fmadd(w0.x(), v01, w1.x() * v11);
 
-            return dr::fmadd(w0.y(), v0, w1.y() * v1) * dr::prod(res);
+            return dr::fmadd(w0.y(), v0, w1.y() * v1) * dr::prod(res) * dtransform;
         } else {
             // Scale to bitmap resolution, no shift
-            Point2f uv = pos_ * res;
+            Point2f uv = pos * res;
 
             // Integer pixel positions for nearest-neighbor interpolation
             Vector2i uv_i = m_texture.wrap(dr::floor2int<Vector2i>(uv));
 
-            return m_distr2d->pdf(uv_i, active) * dr::prod(res);
+            return m_distr2d->pdf(uv_i, active) * dr::prod(res) * dtransform;
         }
     }
 
