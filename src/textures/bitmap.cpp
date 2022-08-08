@@ -483,6 +483,11 @@ public:
             }
         }
 
+        // Account for internal `to_uv` transformation
+        sample2 = m_transform.inverse().transform_affine(sample2);
+        // TODO precompoute jacobian determinant
+        pdf *= dr::abs(dr::det(Matrix3f( m_transform.matrix )));
+
         return { sample2, pdf * dr::prod(res) };
     }
 
