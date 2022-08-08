@@ -61,11 +61,7 @@ public:
     {
         // Evaluate the Fresnel equations for unpolarized illumination
         Float cos_theta_i = Frame3f::cos_theta(wi);
-        Float cos_theta_i_abs = dr::abs(cos_theta_i);
-
         auto [ a_s, a_p, cos_theta_t, eta_it, eta_ti ] = fresnel_polarized(cos_theta_i, m_eta);
-        auto cos_theta_t_abs = dr::abs(cos_theta_t);
-
         Float R_s = dr::squared_norm(a_s);
         Float R_p = dr::squared_norm(a_p);
         Float T_s = 1 - R_s;
@@ -90,18 +86,109 @@ public:
     }
 
 
+    template <int N>
+    Vector3f compute_local_refraction_position_binary_search(Vector3f below_position, Vector3f above_position) const
+    {
+        // NOTE: assume that eta > 1!
+        Ray3f ray(above_position, below_position - above_position);
+        // Ray parameter from above point to below point where z = 0
+        Float t_min = - ray.o.z() / ray.d.z();
+        Float t_max = 1;
+        // Extremes are straight line (t_min) and most extreme refraction possible (t_max).
+
+        for (int i = 0; i < N; ++i)
+        {
+            Float t = Float(0.5)*(t_min + t_max);
+
+            Vector3f intersection_position = ray(t);
+            intersection_position.z() = 0;
+
+            Vector3f incoming_dir = dr::normalize(intersection_position - above_position);
+            Vector3f outgoing_dir = dr::normalize(below_position - intersection_position);
+
+            Float cos_theta_i = Frame3f::cos_theta(incoming_dir);
+            auto [ F, cos_theta_t, eta_it, eta_ti ] = fresnel(cos_theta_i, m_eta);
+
+            Vector3f refracted_dir = refract(incoming_dir, cos_theta_t, eta_ti);
+
+            // We optimize towards zero, not -\infty!
+            Float loss = outgoing_dir.z() - refracted_dir.z();
+
+            t_max = dr::select(loss < 0, t, t_max);
+            t_min = dr::select(loss < 0, t_min, t);
+        }
+
+        Float t = Float(0.5)*(t_min + t_max);
+        Vector3f refraction_position = ray(t);
+        refraction_position.z() = 0;
+        return refraction_position;
+    }
+
+
+
+    void normalize_with_grad(Vector3f x, Vector3f dx, Vector3f &result, Vector3f &dresult) const
+    {
+        Float xdotdx = dr::dot(x, dx);
+        Float xdotx = dr::dot(x, x);
+        Float x_len = dr::norm(x);
+        Vector3f x_norm = dr::normalize(x);
+
+        result = x_norm;
+        dresult = (dx * x_len - x_norm * xdotdx) / xdotx;
+    }
+
+    void local_refract_with_grad(Vector3f local_I, Float eta, Vector3f dlocal_I, Vector3f &local_result, Vector3f &dlocal_result) const
+    {
+        // TODO verify consistency with mitsuba refract!!
+        Float I_z = local_I.z();
+        Float k = 1 - eta*eta * (1 - I_z*I_z);
+
+        local_result = eta * local_I - (eta * I_z + dr::sqrt(k)) * Vector3f(0, 0, 1);
+        dlocal_result = Vector3f(eta, eta, -eta*eta*I_z / dr::sqrt(k)) * dlocal_I; // diag(...) * dlocal_I
+
+        local_result = dr::select(k > 0, local_result, dr::zeros<Vector3f>(0));
+        dlocal_result = dr::select(k > 0, dlocal_result, dr::zeros<Vector3f>(0));
+    }
+
+    Float compute_local_refraction_position_jacobian(Vector3f local_frame_bottom_position, Vector3f local_frame_refraction_position, Vector3f local_frame_vector_to_shading_point) const
+    {
+        // Compute d(local_frame_bottom_position.xy) / d(local_frame_refraction_position.xy)
+        // NOTE these are two variables!
+        // TODO can we restrict to the 1d manifold??? probably not?
+
+        Vector3f unnormalized_incoming_ray_dir = local_frame_refraction_position - local_frame_vector_to_shading_point;
+        Vector3f dunnormalized_incoming_ray_dir_dx = Vector3f(1, 0, 0);
+        Vector3f dunnormalized_incoming_ray_dir_dy = Vector3f(0, 1, 0);
+
+        Vector3f incoming_ray_dir;
+        Vector3f dincoming_ray_dir_dx;
+        Vector3f dincoming_ray_dir_dy;
+        normalize_with_grad(unnormalized_incoming_ray_dir, dunnormalized_incoming_ray_dir_dx, incoming_ray_dir, dincoming_ray_dir_dx);
+        normalize_with_grad(unnormalized_incoming_ray_dir, dunnormalized_incoming_ray_dir_dy, incoming_ray_dir, dincoming_ray_dir_dy);
+
+        Float eta_ti = 1/dr::rcp(m_eta); // m_eta = n2/n1, eta_ti = n2/n1
+
+        Vector3f below_ray_dir;
+        Vector3f dbelow_ray_dir_dx;
+        Vector3f dbelow_ray_dir_dy;
+        local_refract_with_grad(incoming_ray_dir, eta_ti, dincoming_ray_dir_dx, below_ray_dir, dbelow_ray_dir_dx);
+        local_refract_with_grad(incoming_ray_dir, eta_ti, dincoming_ray_dir_dy, below_ray_dir, dbelow_ray_dir_dy);
+
+        // glm::vec3 local_frame_bottom_position = local_frame_refraction_position + below_ray_dir * local_frame_bottom_position.z / below_ray_dir.z
+        Vector2f dlocal_frame_bottom_position_dx = Vector2f(1, 0) + (dr::head<2>(dbelow_ray_dir_dx) * below_ray_dir.z() - dr::head<2>(below_ray_dir) * dbelow_ray_dir_dx.z()) * local_frame_bottom_position.z() / (below_ray_dir.z() * below_ray_dir.z());
+        Vector2f dlocal_frame_bottom_position_dy = Vector2f(0, 1) + (dr::head<2>(dbelow_ray_dir_dy) * below_ray_dir.z() - dr::head<2>(below_ray_dir) * dbelow_ray_dir_dy.z()) * local_frame_bottom_position.z() / (below_ray_dir.z() * below_ray_dir.z());
+
+        Float dbottom_drefraction = dr::abs(dr::det(Matrix2f(dlocal_frame_bottom_position_dx, dlocal_frame_bottom_position_dy)));
+        return dbottom_drefraction;
+    }
+
+
+
     Spectrum eval(const SurfaceInteraction3f &si, Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::EndpointEvaluate, active);
 
         // Evaluate the Fresnel equations for unpolarized illumination
         Float cos_theta_i = Frame3f::cos_theta(si.wi);
-        Float cos_theta_i_abs = dr::abs(cos_theta_i);
-
-        /* Using Snell's law, calculate the squared sine of the
-        angle between the surface normal and the transmitted ray */
-        //Float cos_theta_t_sqr = 1.0f - m_eta * m_eta * (1.0f - cos_theta_i * cos_theta_i);
-        //Float cos_theta_t = mulsign_neg(cos_theta_t_abs, cos_theta_i);
-
         auto [ a_s, a_p, cos_theta_t, eta_it, eta_ti ] = fresnel_polarized(cos_theta_i, m_eta);
         auto cos_theta_t_abs = dr::abs(cos_theta_t);
 
@@ -140,8 +227,8 @@ public:
         return T * E * radiance;
     }
 
-    std::pair<Ray3f, Spectrum> sample_ray(Float time, Float wavelength_sample,
-                                          const Point2f &sample2, const Point2f &sample3,
+    std::pair<Ray3f, Spectrum> sample_ray(Float /*time*/, Float /*wavelength_sample*/,
+                                          const Point2f &/*sample2*/, const Point2f &/*sample3*/,
                                           Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::EndpointSampleRay, active);
 
@@ -152,18 +239,120 @@ public:
     std::pair<DirectionSample3f, Spectrum>
     sample_direction(const Interaction3f &it, const Point2f &sample, Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::EndpointSampleDirection, active);
+        Assert(dynamic_cast<Rectangle*>(m_shape), "Can't sample from a display emitter without an associated Rectangle as shape!");
+        DirectionSample3f ds;
+        SurfaceInteraction3f si;
 
-        // TODO NEE manifold exploration here...
-        return {};
+        // Importance sample the texture, then map onto the shape
+        auto [ uv, uv_pdf ] = m_radiance->sample_position(sample, active);
+        active &= dr::neq(uv_pdf, 0.f);
+
+        si = m_shape->eval_parameterization(uv, +RayFlags::All, active);
+        si.wavelengths = it.wavelengths;
+        active &= si.is_valid();
+
+        // In shading frame:
+        Vector3f vector_to_shading_point = si.to_local(it.p - si.p);
+        // If the shading point is on or below the horizon, let sampling fail!
+        active &= !( vector_to_shading_point.z() < Float(1e-6) );
+
+        Vector3f vector_to_bottom = Vector3f(0, 0, -m_thickness);
+
+        // NOTE: this must happen in orthonormal coordinate system (local_frame), the local coordinate system of the rectangle might be scaled!
+        ///glm::vec3 vector_to_refraction_ts = compute_local_refraction_position_newton<10>(local_frame_vector_to_bottom, local_frame_vector_to_shading_point, sbt_data->eta);
+        Vector3f vector_to_refraction  = compute_local_refraction_position_binary_search<10>(vector_to_bottom, vector_to_shading_point);
+
+        // Shift surface position in world space.
+        si.p += si.to_world(vector_to_refraction);
+
+        // TODO check if refraction position is out of local geometry bounds!!
+
+        // Compute direction sample
+        ds.p = si.p;
+        ds.n = si.n;
+        ds.uv = si.uv;
+        ds.time = it.time;
+        ds.delta = false;
+        ds.d = ds.p - it.p;
+
+        Float dist_squared = dr::squared_norm(ds.d);
+        ds.dist = dr::sqrt(dist_squared);
+        ds.d /= ds.dist;
+
+        // Multiply Jacobian determinant due to refraction shift
+        Float dbottom_dsurface = compute_local_refraction_position_jacobian(vector_to_bottom, vector_to_refraction, vector_to_shading_point);
+
+        // Compute final sampling pdf
+        Float dp = dr::dot(ds.d, ds.n);
+        active &= dp < 0.f;
+        ds.pdf = dr::select(active, uv_pdf * dbottom_dsurface / dr::norm(dr::cross(si.dp_du, si.dp_dv)) *
+                                    dist_squared / -dp, 0.f);
+
+        // Compute radiance / pdf
+
+        Vector3f wi = si.to_local(ds.d);
+
+        // Evaluate the Fresnel equations for unpolarized illumination
+        Float cos_theta_i = Frame3f::cos_theta(wi);
+        auto [ a_s, a_p, cos_theta_t, eta_it, eta_ti ] = fresnel_polarized(cos_theta_i, m_eta);
+        auto cos_theta_t_abs = dr::abs(cos_theta_t);
+
+        // Transmittance
+        Spectrum T = compute_display_glass_transmittance(wi);
+
+        // Emission profile
+        Spectrum E = compute_display_emission_profile(cos_theta_t_abs);
+
+        Spectrum radiance = T * E * m_radiance->eval(si, active) / ds.pdf;
+
+        ds.emitter = this;
+        return { ds, radiance & active };
     }
 
     Float pdf_direction(const Interaction3f &it, const DirectionSample3f &ds,
                         Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::EndpointEvaluate, active);
 
-        // TODO evaluate pdf for sampled direction
-        // this might be difficult!!
-        return 0; // TODO
+        // Get the surface interaction!
+        SurfaceInteraction3f si = m_shape->eval_parameterization(ds.uv, +RayFlags::All, active);
+        // Note: Shading frame will be identical for all positions on the shape!
+        Vector3f vector_to_shading_point = si.to_local(it.p - si.p);
+
+        // Evaluate the Fresnel equations for unpolarized illumination
+        Vector3f wi = dr::normalize(-vector_to_shading_point);
+        Float cos_theta_i = Frame3f::cos_theta(wi);
+        auto [ a_s, a_p, cos_theta_t, eta_it, eta_ti ] = fresnel_polarized(cos_theta_i, m_eta);
+        Vector3f wo = refract(wi, cos_theta_t, eta_ti);
+
+        // Project refracted direction to the "bottom" of the display
+        Vector3f vector_to_bottom = (-m_thickness / wo.z()) * wo;
+        Vector2f projected_bottom_dir = -m_thickness * dr::head<2>(wo) / wo.z();
+
+        // Also in local coordinate system
+        Vector3f dp_du = si.to_local(si.dp_du);
+        Vector3f dp_dv = si.to_local(si.dp_dv);
+
+        // Fuv(Fp(uv)) = uv
+        // D( Fuv(Fp(uv)) ) = Id = Duv(p) * Dp(uv)
+        // Initialize from list of columns, just like in GLSL
+        Matrix2f dp_duv = Matrix2f(dr::head<2>(dp_du), dr::head<2>(dp_dv));
+        Matrix2f duv_dp = dr::inverse(dp_duv);
+
+        Vector2f uv_shift = duv_dp * projected_bottom_dir;
+        Point2f uv = si.uv + uv_shift;
+        Float uv_pdf = m_radiance->pdf_position(uv, active);
+
+        // multiply this to position sampling pdf:
+        Vector3f refraction_position = dr::zeros<Vector3f>();
+        Float dbottom_dsurface = compute_local_refraction_position_jacobian(vector_to_bottom, refraction_position, vector_to_shading_point);
+
+        // Compute final sampling pdf
+        Float dp = dr::dot(ds.d, ds.n);
+        active &= dp < 0.f;
+        Float pdf = dr::select(active, uv_pdf * dbottom_dsurface / dr::norm(dr::cross(si.dp_du, si.dp_dv)) *
+                                    (ds.dist * ds.dist) / -dp, 0.f);
+
+        return pdf;
     }
 
     ScalarBoundingBox3f bbox() const override { return m_shape->bbox(); }
@@ -175,14 +364,6 @@ public:
         callback->put_parameter("eta", m_eta, +ParamFlags::NonDifferentiable);
         callback->put_parameter("polarization_dir", m_polarization_dir, +ParamFlags::NonDifferentiable);
         callback->put_parameter("emission_coeffs", m_emission_coeffs, +ParamFlags::NonDifferentiable);
-        /*
-        callback->put_parameter("emission_coeffs[0]", m_emission_coeffs[0]);
-        callback->put_parameter("emission_coeffs[1]", m_emission_coeffs[1]);
-        callback->put_parameter("emission_coeffs[2]", m_emission_coeffs[2]);
-        callback->put_parameter("emission_coeffs[3]", m_emission_coeffs[3]);
-        callback->put_parameter("emission_coeffs[4]", m_emission_coeffs[4]);
-        callback->put_parameter("emission_coeffs[5]", m_emission_coeffs[5]);
-        */
     }
 
     std::string to_string() const override {
