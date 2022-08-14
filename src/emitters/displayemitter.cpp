@@ -228,7 +228,7 @@ public:
         si_bottom.uv += uv_shift;
 
         auto radiance = m_radiance->eval(si_bottom, active);
-        return T * E * radiance;
+        return dr::select(active, T * E * radiance, 0);
     }
 
     std::pair<Ray3f, Spectrum> sample_ray(Float /*time*/, Float /*wavelength_sample*/,
