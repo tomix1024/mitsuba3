@@ -103,7 +103,8 @@ public:
             Vector3f intersection_position = ray(t);
             intersection_position.z() = 0;
 
-            Vector3f incoming_dir = dr::normalize(intersection_position - above_position);
+            // NOTE: in Mitsuba the directions point away from the interactions!!
+            Vector3f incoming_dir = dr::normalize(above_position - intersection_position);
             Vector3f outgoing_dir = dr::normalize(below_position - intersection_position);
 
             Float cos_theta_i = Frame3f::cos_theta(incoming_dir);
@@ -140,6 +141,7 @@ public:
     void local_refract_with_grad(Vector3f local_I, Float eta, Vector3f dlocal_I, Vector3f &local_result, Vector3f &dlocal_result) const
     {
         // TODO verify consistency with mitsuba refract!!
+        // NOTE: this is _our_ refraction. (Inconsistent with mitsuba's refract)
         Float I_z = local_I.z();
         Float k = 1 - eta*eta * (1 - I_z*I_z);
 
@@ -166,7 +168,7 @@ public:
         normalize_with_grad(unnormalized_incoming_ray_dir, dunnormalized_incoming_ray_dir_dx, incoming_ray_dir, dincoming_ray_dir_dx);
         normalize_with_grad(unnormalized_incoming_ray_dir, dunnormalized_incoming_ray_dir_dy, incoming_ray_dir, dincoming_ray_dir_dy);
 
-        Float eta_ti = 1/dr::rcp(m_eta); // m_eta = n2/n1, eta_ti = n2/n1
+        Float eta_ti = dr::rcp(m_eta); // m_eta = n2/n1, eta_ti = n2/n1
 
         Vector3f below_ray_dir;
         Vector3f dbelow_ray_dir_dx;
@@ -189,6 +191,8 @@ public:
 
         // Evaluate the Fresnel equations for unpolarized illumination
         Float cos_theta_i = Frame3f::cos_theta(si.wi);
+        active &= cos_theta_i > 0;
+
         auto [ a_s, a_p, cos_theta_t, eta_it, eta_ti ] = fresnel_polarized(cos_theta_i, m_eta);
         auto cos_theta_t_abs = dr::abs(cos_theta_t);
 
@@ -248,6 +252,7 @@ public:
         active &= dr::neq(uv_pdf, 0.f);
 
         si = m_shape->eval_parameterization(uv, +RayFlags::All, active);
+        si.initialize_sh_frame(); // < without initializing the sh frame, the sh frame will be the to world transform of the shape! (including scaling factors!!)
         si.wavelengths = it.wavelengths;
         active &= si.is_valid();
 
@@ -273,7 +278,7 @@ public:
         ds.uv = si.uv;
         ds.time = it.time;
         ds.delta = false;
-        ds.d = ds.p - it.p;
+        ds.d = ds.p - it.p; // TODO verify: direction pointing away from it
 
         Float dist_squared = dr::squared_norm(ds.d);
         ds.dist = dr::sqrt(dist_squared);
@@ -284,13 +289,13 @@ public:
 
         // Compute final sampling pdf
         Float dp = dr::dot(ds.d, ds.n);
-        active &= dp < 0.f;
+        active &= dp < -1e-3; //0.f;
         ds.pdf = dr::select(active, uv_pdf * dbottom_dsurface / dr::norm(dr::cross(si.dp_du, si.dp_dv)) *
                                     dist_squared / -dp, 0.f);
 
         // Compute radiance / pdf
 
-        Vector3f wi = si.to_local(ds.d);
+        Vector3f wi = si.to_local(-ds.d); // ds.d points towards si, wi points away from si!
 
         // Evaluate the Fresnel equations for unpolarized illumination
         Float cos_theta_i = Frame3f::cos_theta(wi);
@@ -315,12 +320,14 @@ public:
 
         // Get the surface interaction!
         SurfaceInteraction3f si = m_shape->eval_parameterization(ds.uv, +RayFlags::All, active);
+        si.initialize_sh_frame(); // < without initializing the sh frame, the sh frame will be the to world transform of the shape! (including scaling factors!!)
         // Note: Shading frame will be identical for all positions on the shape!
         Vector3f vector_to_shading_point = si.to_local(it.p - si.p);
 
         // Evaluate the Fresnel equations for unpolarized illumination
         Vector3f wi = dr::normalize(-vector_to_shading_point);
         Float cos_theta_i = Frame3f::cos_theta(wi);
+        active &= cos_theta_i > 0;
         auto [ a_s, a_p, cos_theta_t, eta_it, eta_ti ] = fresnel_polarized(cos_theta_i, m_eta);
         Vector3f wo = refract(wi, cos_theta_t, eta_ti);
 
@@ -348,7 +355,7 @@ public:
 
         // Compute final sampling pdf
         Float dp = dr::dot(ds.d, ds.n);
-        active &= dp < 0.f;
+        active &= dp < -1e-3;//0.f;
         Float pdf = dr::select(active, uv_pdf * dbottom_dsurface / dr::norm(dr::cross(si.dp_du, si.dp_dv)) *
                                     (ds.dist * ds.dist) / -dp, 0.f);
 
