@@ -148,8 +148,8 @@ public:
         local_result = eta * local_I - (eta * I_z + dr::sqrt(k)) * Vector3f(0, 0, 1);
         dlocal_result = Vector3f(eta, eta, -eta*eta*I_z / dr::sqrt(k)) * dlocal_I; // diag(...) * dlocal_I
 
-        local_result = dr::select(k > 0, local_result, dr::zeros<Vector3f>(0));
-        dlocal_result = dr::select(k > 0, dlocal_result, dr::zeros<Vector3f>(0));
+        local_result = dr::select(k > 0, local_result, Vector3f(0, 0, 0));
+        dlocal_result = dr::select(k > 0, dlocal_result, Vector3f(0, 0, 0));
     }
 
     Float compute_local_refraction_position_jacobian(Vector3f local_frame_bottom_position, Vector3f local_frame_refraction_position, Vector3f local_frame_vector_to_shading_point) const
