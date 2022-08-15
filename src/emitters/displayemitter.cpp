@@ -350,7 +350,7 @@ public:
         Float uv_pdf = m_radiance->pdf_position(uv, active);
 
         // multiply this to position sampling pdf:
-        Vector3f refraction_position = dr::zeros<Vector3f>();
+        Vector3f refraction_position = Vector3f(0, 0, 0);
         Float dbottom_dsurface = compute_local_refraction_position_jacobian(vector_to_bottom, refraction_position, vector_to_shading_point);
 
         // Compute final sampling pdf
