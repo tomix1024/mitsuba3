@@ -370,7 +370,12 @@ public:
         callback->put_parameter("thickness", m_thickness, +ParamFlags::NonDifferentiable);
         callback->put_parameter("eta", m_eta, +ParamFlags::NonDifferentiable);
         callback->put_parameter("polarization_dir", m_polarization_dir, +ParamFlags::NonDifferentiable);
-        callback->put_parameter("emission_coeffs", m_emission_coeffs, +ParamFlags::NonDifferentiable);
+        callback->put_parameter("emission_coeffs_0", m_emission_coeffs[0], +ParamFlags::NonDifferentiable);
+        callback->put_parameter("emission_coeffs_1", m_emission_coeffs[1], +ParamFlags::NonDifferentiable);
+        callback->put_parameter("emission_coeffs_2", m_emission_coeffs[2], +ParamFlags::NonDifferentiable);
+        callback->put_parameter("emission_coeffs_3", m_emission_coeffs[3], +ParamFlags::NonDifferentiable);
+        callback->put_parameter("emission_coeffs_4", m_emission_coeffs[4], +ParamFlags::NonDifferentiable);
+        callback->put_parameter("emission_coeffs_5", m_emission_coeffs[5], +ParamFlags::NonDifferentiable);
     }
 
     std::string to_string() const override {
