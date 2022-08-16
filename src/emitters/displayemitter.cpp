@@ -185,6 +185,22 @@ public:
     }
 
 
+    Vector2f compute_uv_shift(const SurfaceInteraction3f &si, Vector2f local_frame_shift) const
+    {
+        // Also in local coordinate system
+        Vector3f dp_du = si.to_local(si.dp_du);
+        Vector3f dp_dv = si.to_local(si.dp_dv);
+
+        // Fuv(Fp(uv)) = uv
+        // D( Fuv(Fp(uv)) ) = Id = Duv(p) * Dp(uv)
+        // Initialize from list of columns, just like in GLSL
+        Matrix2f dp_duv = Matrix2f(dr::head<2>(dp_du), dr::head<2>(dp_dv));
+        Matrix2f duv_dp = dr::inverse(dp_duv);
+
+        Vector2f uv_shift = duv_dp * local_frame_shift;
+        return uv_shift;
+    }
+
 
     Spectrum eval(const SurfaceInteraction3f &si, Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::EndpointEvaluate, active);
@@ -196,12 +212,6 @@ public:
         auto [ a_s, a_p, cos_theta_t, eta_it, eta_ti ] = fresnel_polarized(cos_theta_i, m_eta);
         auto cos_theta_t_abs = dr::abs(cos_theta_t);
 
-        // Transmittance
-        Spectrum T = compute_display_glass_transmittance(si.wi);
-
-        // Emission profile
-        Spectrum E = compute_display_emission_profile(cos_theta_t_abs);
-
         // NOTE: it is possible that the value returned by m_radiance->eval does _not_ depend on the uv coordinates but on the mesh attributes instead.
         // This will not be supported properly here.
 
@@ -212,32 +222,20 @@ public:
         //  => wo *= -m_thickness / wo.z()
         Vector2f projected_bottom_dir = -m_thickness * dr::head<2>(wo) / wo.z();
 
-        // Also in local coordinate system
-        Vector3f dp_du = si.to_local(si.dp_du);
-        Vector3f dp_dv = si.to_local(si.dp_dv);
-
-        // Fuv(Fp(uv)) = uv
-        // D( Fuv(Fp(uv)) ) = Id = Duv(p) * Dp(uv)
-        // Initialize from list of columns, just like in GLSL
-        Matrix2f dp_duv = Matrix2f(dr::head<2>(dp_du), dr::head<2>(dp_dv));
-        Matrix2f duv_dp = dr::inverse(dp_duv);
-
-        Vector2f uv_shift = duv_dp * projected_bottom_dir;
-
+        Vector2f uv_shift = compute_uv_shift(si, projected_bottom_dir);
         SurfaceInteraction3f si_bottom = si;
         si_bottom.uv += uv_shift;
 
-        auto radiance = m_radiance->eval(si_bottom, active);
-        return dr::select(active, T * E * radiance, 0);
-    }
+        // Transmittance
+        Spectrum T = compute_display_glass_transmittance(si.wi);
 
-    std::pair<Ray3f, Spectrum> sample_ray(Float /*time*/, Float /*wavelength_sample*/,
-                                          const Point2f &/*sample2*/, const Point2f &/*sample3*/,
-                                          Mask active) const override {
-        MI_MASKED_FUNCTION(ProfilerPhase::EndpointSampleRay, active);
+        // Emission profile
+        Spectrum E = compute_display_emission_profile(cos_theta_t_abs);
 
-        // TODO sample direction on emitter surface and transform into scene
-        return {};
+        // Radiance texture
+        Spectrum R = m_radiance->eval(si_bottom, active);
+
+        return (T * E * R) & active;
     }
 
     std::pair<DirectionSample3f, Spectrum>
@@ -266,16 +264,22 @@ public:
         // NOTE: this must happen in orthonormal coordinate system (local_frame), the local coordinate system of the rectangle might be scaled!
         ///glm::vec3 vector_to_refraction_ts = compute_local_refraction_position_newton<10>(local_frame_vector_to_bottom, local_frame_vector_to_shading_point, sbt_data->eta);
         Vector3f vector_to_refraction  = compute_local_refraction_position_binary_search<10>(vector_to_bottom, vector_to_shading_point);
+        // Jacobian determinant due to refraction shift for sampling PDF
+        Float dbottom_dsurface = compute_local_refraction_position_jacobian(vector_to_bottom, vector_to_refraction, vector_to_shading_point);
 
         // Shift surface position in world space.
         si.p += si.to_world(vector_to_refraction);
+
+        // Shift uv coordinate.
+        Vector2f projected_vector_to_refraction = dr::head<2>(vector_to_refraction);
+        Vector2f uv_shift = compute_uv_shift(si, projected_vector_to_refraction); // TODO
 
         // TODO check if refraction position is out of local geometry bounds!!
 
         // Compute direction sample
         ds.p = si.p;
         ds.n = si.n;
-        ds.uv = si.uv;
+        ds.uv = si.uv + uv_shift;
         ds.time = it.time;
         ds.delta = false;
         ds.d = ds.p - it.p; // TODO verify: direction pointing away from it
@@ -283,9 +287,6 @@ public:
         Float dist_squared = dr::squared_norm(ds.d);
         ds.dist = dr::sqrt(dist_squared);
         ds.d /= ds.dist;
-
-        // Multiply Jacobian determinant due to refraction shift
-        Float dbottom_dsurface = compute_local_refraction_position_jacobian(vector_to_bottom, vector_to_refraction, vector_to_shading_point);
 
         // Compute final sampling pdf
         Float dp = dr::dot(ds.d, ds.n);
@@ -308,46 +309,54 @@ public:
         // Emission profile
         Spectrum E = compute_display_emission_profile(cos_theta_t_abs);
 
-        Spectrum radiance = T * E * m_radiance->eval(si, active) / ds.pdf;
+        // Radiance texture
+        Spectrum R = m_radiance->eval(si, active);
+
+        Spectrum radiance = T * E * R / ds.pdf;
 
         ds.emitter = this;
         return { ds, radiance & active };
     }
 
-    Float pdf_direction(const Interaction3f &it, const DirectionSample3f &ds,
-                        Mask active) const override {
-        MI_MASKED_FUNCTION(ProfilerPhase::EndpointEvaluate, active);
-
+    std::pair<Spectrum, Float>
+    eval_and_pdf_direction(const Interaction3f &it, const DirectionSample3f &ds, Mask active) const
+    {
         // Get the surface interaction!
         SurfaceInteraction3f si = m_shape->eval_parameterization(ds.uv, +RayFlags::All, active);
         si.initialize_sh_frame(); // < without initializing the sh frame, the sh frame will be the to world transform of the shape! (including scaling factors!!)
         // Note: Shading frame will be identical for all positions on the shape!
         Vector3f vector_to_shading_point = si.to_local(it.p - si.p);
+        Vector3f wi = dr::normalize(vector_to_shading_point);
+
+        //Vector3f wi = si.to_local(-ds.d);
+        //Vector3f vector_to_shading_point = wi * ds.dist;
 
         // Evaluate the Fresnel equations for unpolarized illumination
-        Vector3f wi = dr::normalize(-vector_to_shading_point);
         Float cos_theta_i = Frame3f::cos_theta(wi);
         active &= cos_theta_i > 0;
         auto [ a_s, a_p, cos_theta_t, eta_it, eta_ti ] = fresnel_polarized(cos_theta_i, m_eta);
+        Float cos_theta_t_abs = dr::abs(cos_theta_t);
         Vector3f wo = refract(wi, cos_theta_t, eta_ti);
 
         // Project refracted direction to the "bottom" of the display
         Vector3f vector_to_bottom = (-m_thickness / wo.z()) * wo;
         Vector2f projected_bottom_dir = -m_thickness * dr::head<2>(wo) / wo.z();
 
-        // Also in local coordinate system
-        Vector3f dp_du = si.to_local(si.dp_du);
-        Vector3f dp_dv = si.to_local(si.dp_dv);
+        Vector2f uv_shift = compute_uv_shift(si, projected_bottom_dir);
 
-        // Fuv(Fp(uv)) = uv
-        // D( Fuv(Fp(uv)) ) = Id = Duv(p) * Dp(uv)
-        // Initialize from list of columns, just like in GLSL
-        Matrix2f dp_duv = Matrix2f(dr::head<2>(dp_du), dr::head<2>(dp_dv));
-        Matrix2f duv_dp = dr::inverse(dp_duv);
+        SurfaceInteraction3f si_bottom = si;
+        si_bottom.uv += uv_shift;
 
-        Vector2f uv_shift = duv_dp * projected_bottom_dir;
-        Point2f uv = si.uv + uv_shift;
-        Float uv_pdf = m_radiance->pdf_position(uv, active);
+        // Transmittance
+        Spectrum T = compute_display_glass_transmittance(wi);
+
+        // Emission profile
+        Spectrum E = compute_display_emission_profile(cos_theta_t_abs);
+
+        // Radiance texture
+        Spectrum R = m_radiance->eval(si_bottom, active);
+
+        Float uv_pdf = m_radiance->pdf_position(si_bottom.uv, active);
 
         // multiply this to position sampling pdf:
         Vector3f refraction_position = Vector3f(0, 0, 0);
@@ -359,6 +368,21 @@ public:
         Float pdf = dr::select(active, uv_pdf * dbottom_dsurface / dr::norm(dr::cross(si.dp_du, si.dp_dv)) *
                                     (ds.dist * ds.dist) / -dp, 0.f);
 
+        return { (T * E * R) & active, pdf };
+    }
+
+    Spectrum eval_direction(const Interaction3f &it, const DirectionSample3f &ds, Mask active) const override {
+        MI_MASKED_FUNCTION(ProfilerPhase::EndpointSampleRay, active);
+
+        auto [ radiance, pdf] = eval_and_pdf_direction(it, ds, active);
+        return radiance;
+    }
+
+    Float pdf_direction(const Interaction3f &it, const DirectionSample3f &ds,
+                        Mask active) const override {
+        MI_MASKED_FUNCTION(ProfilerPhase::EndpointEvaluate, active);
+
+        auto [ radiance, pdf] = eval_and_pdf_direction(it, ds, active);
         return pdf;
     }
 
