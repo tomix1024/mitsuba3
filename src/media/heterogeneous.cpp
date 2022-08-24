@@ -169,6 +169,7 @@ public:
         callback->put_parameter("scale", m_scale,        +ParamFlags::NonDifferentiable);
         callback->put_object("albedo",   m_albedo.get(), +ParamFlags::Differentiable);
         callback->put_object("sigma_t",  m_sigmat.get(), +ParamFlags::Differentiable);
+        callback->put_object("phase", m_phase_function.get(), +ParamFlags::Differentiable);
         Base::traverse(callback);
     }
 
