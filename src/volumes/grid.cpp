@@ -609,6 +609,7 @@ protected:
         // lookups if we want the true maximum over a region.
         int32_t begin_offset, end_offset;
         switch (m_texture.filter_mode()) {
+            default:
             case dr::FilterMode::Nearest: {
                 begin_offset = 0;
                 end_offset = resolution_factor;
