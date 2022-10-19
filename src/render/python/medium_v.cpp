@@ -20,6 +20,10 @@ public:
         PYBIND11_OVERRIDE_PURE(UnpolarizedSpectrum, Medium, get_majorant, mi, active);
     }
 
+    UnpolarizedSpectrum get_albedo(const MediumInteraction3f &mi, Mask active = true) const override {
+        PYBIND11_OVERRIDE_PURE(UnpolarizedSpectrum, Medium, get_albedo, mi, active);
+    }
+
     std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum, UnpolarizedSpectrum>
     get_scattering_coefficients(const MediumInteraction3f &mi, Mask active = true) const override {
         using Return = std::tuple<UnpolarizedSpectrum, UnpolarizedSpectrum, UnpolarizedSpectrum>;
@@ -71,6 +75,11 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
                 return ptr->eval_tr_and_pdf(mi, si, active); },
             "mi"_a, "si"_a, "active"_a,
             D(Medium, eval_tr_and_pdf))
+       .def("get_albedo",
+            [](Ptr ptr, const MediumInteraction3f &mi, Mask active = true) {
+                return ptr->get_albedo(mi, active); },
+            "mi"_a, "active"_a=true,
+            D(Medium, get_albedo))
        .def("get_scattering_coefficients",
             [](Ptr ptr, const MediumInteraction3f &mi, Mask active = true) {
                 return ptr->get_scattering_coefficients(mi, active); },
