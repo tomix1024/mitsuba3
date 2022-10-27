@@ -92,6 +92,7 @@ Medium<Float, Spectrum>::sample_interaction(const Ray3f &ray, Float sample,
             active_dda &= !reached && (t_next < maxt);
             dr::masked(dda_tmax, active_dda) = dda_tmax + tmax_update;
             dr::masked(tau_acc, active_dda) = tau_next;
+            break;
         }
 
         // Adopt the stopping location, making sure to convert to the main
