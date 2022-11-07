@@ -3,6 +3,7 @@
 #include <drjit/vcall.h>
 #include <mitsuba/core/object.h>
 #include <mitsuba/core/spectrum.h>
+#include <mitsuba/core/random.h>
 #include <mitsuba/core/traits.h>
 #include <mitsuba/render/fwd.h>
 #include <mitsuba/render/volume.h>
@@ -84,8 +85,8 @@ public:
      * to decide whether to perform attached or detached lookups for
      * these quantities.
      */
-    std::pair<MediumInteraction3f, Spectrum>
-    sample_interaction_drt(const Ray3f &ray, Sampler *sampler, UInt32 channel,
+    std::tuple<MediumInteraction3f, Spectrum, PCG32<UInt32>>
+    sample_interaction_drt(const Ray3f &ray, PCG32<UInt32> sampler, UInt32 channel,
                            Mask active) const;
 
     /**

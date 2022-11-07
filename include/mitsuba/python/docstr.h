@@ -4948,6 +4948,12 @@ static const char *__doc_mitsuba_OptixDenoiser_to_string = R"doc()doc";
 
 static const char *__doc_mitsuba_OptixDenoiser_validate_input = R"doc(Helper function to validate tensor sizes)doc";
 
+static const char *__doc_mitsuba_PCG32 = R"doc(Struct representing a PCG32 state)doc";
+
+static const char *__doc_mitsuba_PCG32_inc = R"doc()doc";
+
+static const char *__doc_mitsuba_PCG32_state = R"doc()doc";
+
 static const char *__doc_mitsuba_PCG32Sampler =
 R"doc(Interface for sampler plugins based on the PCG32 random number
 generator)doc";
@@ -6136,6 +6142,10 @@ internal state of the sampler.
 May throw an exception if not supported.)doc";
 
 static const char *__doc_mitsuba_Sampler_loop_put = R"doc(Register internal state of this sampler with a symbolic loop)doc";
+
+static const char *__doc_mitsuba_Sampler_get_pcg32_state = R"doc(Assign the PCG32 state if this is a PCG32-based sampler)doc";
+
+static const char *__doc_mitsuba_Sampler_set_pcg32_state = R"doc(Get the PCG32 state if this is a PCG32-based sampler)doc";
 
 static const char *__doc_mitsuba_Sampler_m_base_seed = R"doc(Base seed value)doc";
 

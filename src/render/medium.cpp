@@ -177,9 +177,9 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
 }
 
 MI_VARIANT
-std::pair<typename Medium<Float, Spectrum>::MediumInteraction3f, Spectrum>
+std::tuple<typename Medium<Float, Spectrum>::MediumInteraction3f, Spectrum, PCG32<typename Medium<Float, Spectrum>::UInt32>>
 Medium<Float, Spectrum>::sample_interaction_drt(const Ray3f &ray,
-                                                Sampler *sampler,
+                                                PCG32<UInt32> sampler,
                                                 UInt32 channel,
                                                 Mask _active) const {
     MI_MASKED_FUNCTION(ProfilerPhase::MediumSample, _active);
@@ -237,7 +237,7 @@ Medium<Float, Spectrum>::sample_interaction_drt(const Ray3f &ray,
         Mask active_drt;
         if (has_supergrid) {
             dr::masked(desired_tau, active && needs_new_target) =
-                -dr::log(1 - sampler->next_1d(active));
+                -dr::log(1 - sampler.next_float32(active));
             dr::masked(tau_acc, active && needs_new_target) = 0.f;
 
             // -- One step of DDA
@@ -295,7 +295,7 @@ Medium<Float, Spectrum>::sample_interaction_drt(const Ray3f &ray,
         } else {
             // Closed form free-flight distance sampling
             local_majorant = global_majorant;
-            dt = -dr::log(1 - sampler->next_1d(active)) / local_majorant;
+            dt = -dr::log(1 - sampler.next_float32(active)) / local_majorant;
             active_drt = active;
         }
         Float dt_clamped = dr::minimum(dt, maxt - running_t);
@@ -307,7 +307,7 @@ Medium<Float, Spectrum>::sample_interaction_drt(const Ray3f &ray,
         /* Note: this should always trigger at the first step */ {
             Mask did_interact =
                 active_drt &
-                ((sampler->next_1d(active) * acc_weight) < current_weight);
+                ((sampler.next_float32(active) * acc_weight) < current_weight);
             // Adopt step with replacement
             dr::masked(sampled_t, did_interact) = running_t;
             dr::masked(sampled_t_step, did_interact) = dt_clamped;
@@ -332,7 +332,7 @@ Medium<Float, Spectrum>::sample_interaction_drt(const Ray3f &ray,
                                     local_majorant)));
     }
 
-    sampled_t = sampled_t + sampler->next_1d(did_traverse) * sampled_t_step;
+    sampled_t = sampled_t + sampler.next_float32(did_traverse) * sampled_t_step;
 
     Mask valid_mei = (sampled_t <= maxt);
     mei.t          = dr::select(valid_mei, sampled_t, dr::Infinity<Float>);
@@ -341,7 +341,7 @@ Medium<Float, Spectrum>::sample_interaction_drt(const Ray3f &ray,
     // interaction. This is so that the caller can decide whether to do an
     // attached or detached lookup.
 
-    return { mei, sampling_weight };
+    return { mei, sampling_weight, sampler };
 }
 
 

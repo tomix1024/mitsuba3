@@ -79,7 +79,7 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
             "ray"_a, "sampler"_a, "channel"_a, "active"_a,
             D(Medium, sample_interaction_real))
        .def("sample_interaction_drt",
-            [](Ptr ptr, const Ray3f &ray, Sampler *sampler, UInt32 channel, Mask active) {
+            [](Ptr ptr, const Ray3f &ray, PCG32<UInt32> sampler, UInt32 channel, Mask active) {
                 return ptr->sample_interaction_drt(ray, sampler, channel, active); },
             "ray"_a, "sampler"_a, "channel"_a, "active"_a,
             D(Medium, sample_interaction_drt))

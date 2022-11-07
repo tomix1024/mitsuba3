@@ -59,9 +59,23 @@ MI_PY_EXPORT(Sampler) {
         .def_method(Sampler, advance)
         .def_method(Sampler, schedule_state)
         .def_method(Sampler, loop_put, "loop"_a)
+        .def_method(Sampler, get_pcg32_state)
+        .def_method(Sampler, set_pcg32_state, "state"_a)
         .def_method(Sampler, seed, "seed"_a, "wavefront_size"_a = (uint32_t) -1)
         .def_method(Sampler, next_1d, "active"_a = true)
         .def_method(Sampler, next_2d, "active"_a = true);
 
     MI_PY_REGISTER_OBJECT("register_sampler", Sampler)
+}
+
+
+MI_PY_EXPORT(PCG32) {
+    MI_PY_IMPORT_TYPES()
+    using PCG32 = PCG32<UInt32>;
+    auto pcg32 = py::class_<PCG32>(m, "PCG32_", D(PCG32))
+        .def_field(PCG32, inc, D(PCG32, inc))
+        .def_field(PCG32, state, D(PCG32, state))
+        .def_repr(PCG32);
+
+    MI_PY_DRJIT_STRUCT(pcg32, PCG32, inc, state)
 }

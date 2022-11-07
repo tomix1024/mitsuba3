@@ -103,6 +103,7 @@ MI_PY_DECLARE(OptixDenoiser);
 MI_PY_DECLARE(PositionSample);
 MI_PY_DECLARE(PhaseFunction);
 MI_PY_DECLARE(DirectionSample);
+MI_PY_DECLARE(PCG32);
 MI_PY_DECLARE(Sampler);
 MI_PY_DECLARE(Scene);
 MI_PY_DECLARE(Sensor);
@@ -205,6 +206,7 @@ PYBIND11_MODULE(MODULE_NAME, m) {
     MI_PY_IMPORT(Texture);
     MI_PY_IMPORT(Volume);
     MI_PY_IMPORT(VolumeGrid);
+    MI_PY_IMPORT(PCG32);
 
     py::object mitsuba_ext = py::module::import("mitsuba.mitsuba_ext");
     cast_object = (Caster) (void *)((py::capsule) mitsuba_ext.attr("cast_object"));

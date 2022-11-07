@@ -131,6 +131,9 @@ public:
     /// Register internal state of this sampler with a symbolic loop
     virtual void loop_put(dr::Loop<Mask> &loop);
 
+    virtual PCG32<UInt32> get_pcg32_state() { NotImplementedError("This is not a PCG32-based sampler!"); }
+    virtual void set_pcg32_state(PCG32<UInt32> /* rng */ ) { NotImplementedError("This is not a PCG32- based sampler!"); }
+
     MI_DECLARE_CLASS()
 protected:
     Sampler(const Properties &props);
@@ -170,6 +173,9 @@ public:
                       uint32_t wavefront_size = (uint32_t) -1) override;
     virtual void schedule_state() override;
     virtual void loop_put(dr::Loop<Mask> &loop) override;
+
+    virtual PCG32 get_pcg32_state() override { return m_rng; }
+    virtual void set_pcg32_state(PCG32 rng) override { m_rng = rng; }
 
     MI_DECLARE_CLASS()
 protected:
