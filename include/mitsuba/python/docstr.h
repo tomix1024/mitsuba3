@@ -5048,6 +5048,8 @@ static const char *__doc_mitsuba_PhaseFunctionFlags_Isotropic = R"doc()doc";
 
 static const char *__doc_mitsuba_PhaseFunctionFlags_Microflake = R"doc()doc";
 
+static const char *__doc_mitsuba_PhaseFunctionFlags_Delta = R"doc()doc";
+
 static const char *__doc_mitsuba_PhaseFunction_PhaseFunction = R"doc(//! @})doc";
 
 static const char *__doc_mitsuba_PhaseFunction_class = R"doc()doc";

@@ -10,7 +10,8 @@ MI_PY_EXPORT(PhaseFunctionExtras) {
         .def_value(PhaseFunctionFlags, Empty)
         .def_value(PhaseFunctionFlags, Isotropic)
         .def_value(PhaseFunctionFlags, Anisotropic)
-        .def_value(PhaseFunctionFlags, Microflake);
+        .def_value(PhaseFunctionFlags, Microflake)
+        .def_value(PhaseFunctionFlags, Delta);
 
     MI_PY_DECLARE_ENUM_OPERATORS(RayFlags, e)
 }
