@@ -34,7 +34,7 @@ constexpr uint32_t operator&(uint32_t f1, PhaseFunctionFlags f2) { return f1 & (
 constexpr uint32_t operator~(PhaseFunctionFlags f1) { return ~(uint32_t) f1; }
 constexpr uint32_t operator+(PhaseFunctionFlags e) { return (uint32_t) e; }
 template <typename UInt32> constexpr auto has_flag(UInt32 flags, PhaseFunctionFlags f) {
-    return (flags & (uint32_t) f) != 0;
+    return drjit::neq(flags & (uint32_t) f, 0u);
 }
 
 /**
