@@ -188,7 +188,7 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
 
                 // For rays that will stop within this cell, figure out
                 // the precise `t` parameter where `desired_tau` is reached.
-                Float t_precise = dr::select(dr::neq(local_majorant, 0), running_t + (desired_tau - tau_acc) / local_majorant, t_next);
+                Float t_precise = dr::select(majorant > 0, running_t + (desired_tau - tau_acc) / majorant, t_next);
                 Mask reached_dda = active_dda && (t_precise < maxt) && (tau_next >= desired_tau);
                 Mask escaped_dda = active_dda && (t_precise >= maxt);
                 dr::masked(running_t, active_dda) = dr::select(reached_dda || escaped_dda, t_precise, t_next);
@@ -254,7 +254,8 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
         //Float active_coeff = dr::select(did_null_scatter, mei.sigma_n, mei.sigma_t)
         //dr::masked(weight, active_medium) *= active_coeff / dr::detach(extract_channel(active_coeff, channel))
         // NOTE: only do this for sigma_n. sigma_t is handled outside of this loop for differentiation reasons!
-        dr::masked(weight, did_null_scatter) *= mei.sigma_n / extract_channel(mei.sigma_n, channel);
+        // TODO: the check for sigma_n > 0 should not be neccessary???
+        dr::masked(weight, did_null_scatter && extract_channel(mei.sigma_n, channel) > 0) *= mei.sigma_n / dr::detach(extract_channel(mei.sigma_n, channel));
 
         // If real scattering occured, we are done.
         dr::masked(active, active_medium) = did_null_scatter;
