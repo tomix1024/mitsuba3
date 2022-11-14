@@ -188,7 +188,7 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
 
                 // For rays that will stop within this cell, figure out
                 // the precise `t` parameter where `desired_tau` is reached.
-                Float t_precise = running_t + (desired_tau - tau_acc) / local_majorant;
+                Float t_precise = dr::select(dr::neq(local_majorant, 0), running_t + (desired_tau - tau_acc) / local_majorant, t_next);
                 Mask reached_dda = active_dda && (t_precise < maxt) && (tau_next >= desired_tau);
                 Mask escaped_dda = active_dda && (t_precise >= maxt);
                 dr::masked(running_t, active_dda) = dr::select(reached_dda || escaped_dda, t_precise, t_next);
@@ -590,7 +590,7 @@ Medium<Float, Spectrum>::estimate_transmittance(const Ray3f &ray, PCG32<UInt32> 
 
                 // For rays that will stop within this cell, figure out
                 // the precise `t` parameter where `desired_tau` is reached.
-                Float t_precise = running_t + (desired_tau - tau_acc) / local_majorant;
+                Float t_precise = dr::select(dr::neq(local_majorant, 0), running_t + (desired_tau - tau_acc) / local_majorant, t_next);
                 Mask reached_dda = active_dda && (t_precise < maxt) && (tau_next >= desired_tau);
                 Mask escaped_dda = active_dda && (t_precise >= maxt);
                 dr::masked(running_t, active_dda) = dr::select(reached_dda || escaped_dda, t_precise, t_next);
