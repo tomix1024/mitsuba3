@@ -134,7 +134,7 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
 
     Spectrum weight = dr::full<Spectrum>(1.f, dr::width(ray));
     dr::Loop<Mask> loop("Medium::sample_interaction_real");
-    loop.put(active, sampler, running_t, mei);
+    loop.put(active, sampler, weight, escaped, running_t, mei);
     Vector3f dda_tmax       = dr::NaN<Vector3f>;
     Vector3f dda_tdelta     = dr::NaN<Vector3f>;
     Float global_majorant_scalar   = dr::NaN<Float>;
@@ -166,10 +166,9 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
         {
             Mask active_dda = active;
             Float tau_acc = 0;
-            Float dda_t = running_t;
 
             dr::Loop<Mask> dda_loop("Medium::sample_interaction_real::dda_loop", active_dda,
-                dda_t, dda_tmax, tau_acc, mei, local_majorant);
+                running_t, dda_tmax, tau_acc, mei, local_majorant);
             while (dda_loop(active_dda))
             {
                 // Figure out which axis we hit first.
@@ -182,17 +181,17 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
                 }
 
                 // Lookup and accumulate majorant in current cell.
-                dr::masked(mei.t, active_dda) = 0.5f * (dda_t + t_next);
+                dr::masked(mei.t, active_dda) = 0.5f * (running_t + t_next);
                 dr::masked(mei.p, active_dda) = ray(mei.t);
                 dr::masked(local_majorant, active_dda) = m_majorant_grid->eval_1(mei, active_dda);
-                Float tau_next = tau_acc + local_majorant * (t_next - dda_t);
+                Float tau_next = tau_acc + local_majorant * (t_next - running_t);
 
                 // For rays that will stop within this cell, figure out
                 // the precise `t` parameter where `desired_tau` is reached.
-                Float t_precise = dda_t + (desired_tau - tau_acc) / local_majorant;
+                Float t_precise = running_t + (desired_tau - tau_acc) / local_majorant;
                 Mask reached_dda = active_dda && (t_precise < maxt) && (tau_next >= desired_tau);
                 Mask escaped_dda = active_dda && (t_precise >= maxt);
-                dr::masked(dda_t, active_dda) = dr::select(reached_dda || escaped_dda, t_precise, t_next);
+                dr::masked(running_t, active_dda) = dr::select(reached_dda || escaped_dda, t_precise, t_next);
 
                 // Update active dda lanes..
                 active_dda = active_dda && !reached_dda && !escaped_dda;
@@ -205,11 +204,6 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
             }
 
             // NOTE: transmittance weight = 1 always since majorant_grid is scalar-valued!
-
-            // Output the step needed to reach `desired_tau`, as determined by DDA.
-            // If DDA didn't reach `desired_tau` in this iteration, none of the lanes
-            // should receive updates below.
-            dr::masked(running_t, active) = dda_t;
 
             // All active lanes have found a medium interaction...
             // TODO check for t > maxt? later...
@@ -542,7 +536,7 @@ Medium<Float, Spectrum>::estimate_transmittance(const Ray3f &ray, PCG32<UInt32> 
 
     Spectrum weight = dr::full<Spectrum>(1.f, dr::width(ray));
     dr::Loop<Mask> loop("Medium::estimate_transmittance");
-    loop.put(active, sampler, running_t, mei);
+    loop.put(active, sampler, weight, running_t, escaped, mei);
     Vector3f dda_tmax       = dr::NaN<Vector3f>;
     Vector3f dda_tdelta     = dr::NaN<Vector3f>;
     Float global_majorant_scalar   = dr::NaN<Float>;
@@ -574,10 +568,9 @@ Medium<Float, Spectrum>::estimate_transmittance(const Ray3f &ray, PCG32<UInt32> 
         {
             Mask active_dda = active;
             Float tau_acc = 0;
-            Float dda_t = running_t;
 
             dr::Loop<Mask> dda_loop("Medium::estimate_transmittance::dda_loop", active_dda,
-                dda_t, dda_tmax, tau_acc, mei, local_majorant);
+                running_t, dda_tmax, tau_acc, mei, local_majorant);
             while (dda_loop(active_dda))
             {
                 // Figure out which axis we hit first.
@@ -590,17 +583,17 @@ Medium<Float, Spectrum>::estimate_transmittance(const Ray3f &ray, PCG32<UInt32> 
                 }
 
                 // Lookup and accumulate majorant in current cell.
-                dr::masked(mei.t, active_dda) = 0.5f * (dda_t + t_next);
+                dr::masked(mei.t, active_dda) = 0.5f * (running_t + t_next);
                 dr::masked(mei.p, active_dda) = ray(mei.t);
                 dr::masked(local_majorant, active_dda) = m_majorant_grid->eval_1(mei, active_dda);
-                Float tau_next = tau_acc + local_majorant * (t_next - dda_t);
+                Float tau_next = tau_acc + local_majorant * (t_next - running_t);
 
                 // For rays that will stop within this cell, figure out
                 // the precise `t` parameter where `desired_tau` is reached.
-                Float t_precise = dda_t + (desired_tau - tau_acc) / local_majorant;
+                Float t_precise = running_t + (desired_tau - tau_acc) / local_majorant;
                 Mask reached_dda = active_dda && (t_precise < maxt) && (tau_next >= desired_tau);
                 Mask escaped_dda = active_dda && (t_precise >= maxt);
-                dr::masked(dda_t, active_dda) = dr::select(reached_dda || escaped_dda, t_precise, t_next);
+                dr::masked(running_t, active_dda) = dr::select(reached_dda || escaped_dda, t_precise, t_next);
 
                 // Update active dda lanes..
                 active_dda = active_dda && !reached_dda && !escaped_dda;
@@ -613,11 +606,6 @@ Medium<Float, Spectrum>::estimate_transmittance(const Ray3f &ray, PCG32<UInt32> 
             }
 
             // NOTE: transmittance weight = 1 always since majorant_grid is scalar-valued!
-
-            // Output the step needed to reach `desired_tau`, as determined by DDA.
-            // If DDA didn't reach `desired_tau` in this iteration, none of the lanes
-            // should receive updates below.
-            dr::masked(running_t, active) = dda_t;
 
             // All active lanes have found a medium interaction...
             // TODO check for t > maxt? later...
