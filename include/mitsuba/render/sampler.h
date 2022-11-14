@@ -132,7 +132,7 @@ public:
     virtual void loop_put(dr::Loop<Mask> &loop);
 
     virtual PCG32<UInt32> get_pcg32_state() { NotImplementedError("This is not a PCG32-based sampler!"); }
-    virtual void set_pcg32_state(PCG32<UInt32> /* rng */ ) { NotImplementedError("This is not a PCG32- based sampler!"); }
+    virtual void set_pcg32_state(PCG32<UInt32> /* rng */, Mask /* active */ = true) { NotImplementedError("This is not a PCG32- based sampler!"); }
 
     MI_DECLARE_CLASS()
 protected:
@@ -175,7 +175,7 @@ public:
     virtual void loop_put(dr::Loop<Mask> &loop) override;
 
     virtual PCG32 get_pcg32_state() override { return m_rng; }
-    virtual void set_pcg32_state(PCG32 rng) override { m_rng = rng; }
+    virtual void set_pcg32_state(PCG32 rng, Mask active = true) override { dr::masked(m_rng.inc, active) = rng.inc; dr::masked(m_rng.state, active) = rng.state; }
 
     MI_DECLARE_CLASS()
 protected:

@@ -60,7 +60,7 @@ MI_PY_EXPORT(Sampler) {
         .def_method(Sampler, schedule_state)
         .def_method(Sampler, loop_put, "loop"_a)
         .def_method(Sampler, get_pcg32_state)
-        .def_method(Sampler, set_pcg32_state, "state"_a)
+        .def_method(Sampler, set_pcg32_state, "state"_a, "active"_a)
         .def_method(Sampler, seed, "seed"_a, "wavefront_size"_a = (uint32_t) -1)
         .def_method(Sampler, next_1d, "active"_a = true)
         .def_method(Sampler, next_2d, "active"_a = true);
