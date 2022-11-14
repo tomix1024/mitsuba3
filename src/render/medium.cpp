@@ -245,7 +245,10 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
         // Query scattering coefficients at current interaction
         dr::masked(mei.t, active_medium) = running_t;
         dr::masked(mei.p, active_medium) = ray(running_t);
-        std::tie(mei.sigma_s, mei.sigma_n, mei.sigma_t) = get_scattering_coefficients(mei, active_medium);
+        auto [ current_sigma_s, current_sigma_n, current_sigma_t ] = get_scattering_coefficients(mei, active_medium);
+        dr::masked(mei.sigma_s, active_medium) = current_sigma_s;
+        dr::masked(mei.sigma_n, active_medium) = current_sigma_n;
+        dr::masked(mei.sigma_t, active_medium) = current_sigma_t;
 
         // Determine whether it was a real or null interaction
         Float scatter_prob = extract_channel(mei.sigma_t, channel) / local_majorant;
@@ -274,6 +277,7 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
     dr::masked(mei.t, escaped) = dr::Infinity<Float>;
     mei.p                      = ray(mei.t);
 
+    // NOTE: weight is missing final sigma_t factor for valid mei!
     return { mei, weight, sampler };
 }
 
