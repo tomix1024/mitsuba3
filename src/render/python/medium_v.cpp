@@ -74,7 +74,7 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
             "ray"_a, "sample"_a, "channel"_a, "active"_a,
             D(Medium, sample_interaction))
        .def("sample_interaction_real",
-            [](Ptr ptr, const Ray3f &ray, Sampler *sampler, UInt32 channel, Mask active) {
+            [](Ptr ptr, const Ray3f &ray, PCG32<UInt32> sampler, UInt32 channel, Mask active) {
                 return ptr->sample_interaction_real(ray, sampler, channel, active); },
             "ray"_a, "sampler"_a, "channel"_a, "active"_a,
             D(Medium, sample_interaction_real))
@@ -84,7 +84,7 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
             "ray"_a, "sampler"_a, "channel"_a, "active"_a,
             D(Medium, sample_interaction_drt))
        .def("sample_interaction_drrt",
-            [](Ptr ptr, const Ray3f &ray, Sampler *sampler, UInt32 channel, Mask active) {
+            [](Ptr ptr, const Ray3f &ray, PCG32<UInt32> sampler, UInt32 channel, Mask active) {
                 return ptr->sample_interaction_drrt(ray, sampler, channel, active); },
             "ray"_a, "sampler"_a, "channel"_a, "active"_a)
        .def("eval_tr_and_pdf",

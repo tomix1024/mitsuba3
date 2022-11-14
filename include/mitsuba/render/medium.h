@@ -70,8 +70,8 @@ public:
      * Similar to \ref sample_interaction, but ensures that a real interaction
      * is sampled.
      */
-    std::pair<MediumInteraction3f, Spectrum>
-    sample_interaction_real(const Ray3f &ray, Sampler *sampler, UInt32 channel,
+    std::tuple<MediumInteraction3f, Spectrum, PCG32<UInt32>>
+    sample_interaction_real(const Ray3f &ray, PCG32<UInt32> sampler, UInt32 channel,
                             Mask active) const;
 
     /**
@@ -100,8 +100,8 @@ public:
      * to decide whether to perform attached or detached lookups for
      * these quantities.
      */
-    std::pair<MediumInteraction3f, Spectrum>
-    sample_interaction_drrt(const Ray3f &ray, Sampler *sampler, UInt32 channel,
+    std::tuple<MediumInteraction3f, Spectrum, PCG32<UInt32>>
+    sample_interaction_drrt(const Ray3f &ray, PCG32<UInt32> sampler, UInt32 channel,
                             Mask active) const;
 
     /**
