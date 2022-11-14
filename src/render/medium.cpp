@@ -527,6 +527,153 @@ Medium<Float, Spectrum>::sample_interaction_drrt(const Ray3f &ray,
 }
 
 MI_VARIANT
+std::pair<Spectrum, PCG32<typename Medium<Float, Spectrum>::UInt32>>
+Medium<Float, Spectrum>::estimate_transmittance(const Ray3f &ray, PCG32<UInt32> sampler, UInt32 channel,
+                            Mask _active) const {
+
+    MI_MASKED_FUNCTION(ProfilerPhase::MediumSample, _active);
+    // TODO: optimize for RGB by making `channel` a scalar index?
+
+    auto [mei, mint, maxt, active] = prepare_interaction_sampling(ray, _active);
+    const bool has_supergrid    = (bool) m_majorant_grid;
+
+    Mask  escaped               = !active;
+    Float running_t             = mint;
+
+    Spectrum weight = dr::full<Spectrum>(1.f, dr::width(ray));
+    dr::Loop<Mask> loop("Medium::estimate_transmittance");
+    loop.put(active, sampler, running_t, mei);
+    Vector3f dda_tmax       = dr::NaN<Vector3f>;
+    Vector3f dda_tdelta     = dr::NaN<Vector3f>;
+    Float global_majorant_scalar   = dr::NaN<Float>;
+    Spectrum global_majorant_spectral = dr::NaN<Spectrum>;
+    if (has_supergrid)
+    {
+        // Prepare for DDA traversal
+        Float ignore_dda_t_since_it_is_just_mint;
+        std::tie(ignore_dda_t_since_it_is_just_mint, dda_tmax, dda_tdelta) = prepare_dda_traversal(m_majorant_grid.get(), ray, mint, maxt, active);
+        loop.put(dda_tmax);
+    }
+    else
+    {
+        // Get global majorant
+        global_majorant_spectral = get_majorant(mei, active);
+        global_majorant_scalar = extract_channel(global_majorant_spectral, channel);
+    }
+    loop.init();
+
+    while (loop(active))
+    {
+        // Set the mint for next sampling iteration
+        dr::masked(mei.mint, active) = running_t; // last running_t becomes new mint.
+        Float desired_tau = -dr::log(1 - sampler.next_float32(active));
+
+        Float local_majorant = 0;
+        Mask active_medium;
+        if (has_supergrid)
+        {
+            Mask active_dda = active;
+            Float tau_acc = 0;
+            Float dda_t = running_t;
+
+            dr::Loop<Mask> dda_loop("Medium::estimate_transmittance::dda_loop", active_dda,
+                dda_t, dda_tmax, tau_acc, mei, local_majorant);
+            while (dda_loop(active_dda))
+            {
+                // Figure out which axis we hit first.
+                // `t_next` is the ray's `t` parameter when hitting that axis.
+                Float t_next = dr::min(dda_tmax);
+                Vector3f tmax_update;
+                for (size_t k = 0; k < 3; ++k) {
+                    tmax_update[k] = dr::select(dr::eq(dda_tmax[k], t_next),
+                                                dda_tdelta[k], 0);
+                }
+
+                // Lookup and accumulate majorant in current cell.
+                dr::masked(mei.t, active_dda) = 0.5f * (dda_t + t_next);
+                dr::masked(mei.p, active_dda) = ray(mei.t);
+                dr::masked(local_majorant, active_dda) = m_majorant_grid->eval_1(mei, active_dda);
+                Float tau_next = tau_acc + local_majorant * (t_next - dda_t);
+
+                // For rays that will stop within this cell, figure out
+                // the precise `t` parameter where `desired_tau` is reached.
+                Float t_precise = dda_t + (desired_tau - tau_acc) / local_majorant;
+                Mask reached_dda = active_dda && (t_precise < maxt) && (tau_next >= desired_tau);
+                Mask escaped_dda = active_dda && (t_precise >= maxt);
+                dr::masked(dda_t, active_dda) = dr::select(reached_dda || escaped_dda, t_precise, t_next);
+
+                // Update active dda lanes..
+                active_dda = active_dda && !reached_dda && !escaped_dda;
+
+                // Prepare for next DDA iteration. Lanes that reached their
+                // target optical depth did *not* move to the next cell yet.
+                dr::masked(dda_tmax, active_dda) = dda_tmax + tmax_update;
+                dr::masked(tau_acc, active_dda) = tau_next;
+                // -- DDA step done.
+            }
+
+            // NOTE: transmittance weight = 1 always since majorant_grid is scalar-valued!
+
+            // Output the step needed to reach `desired_tau`, as determined by DDA.
+            // If DDA didn't reach `desired_tau` in this iteration, none of the lanes
+            // should receive updates below.
+            dr::masked(running_t, active) = dda_t;
+
+            // All active lanes have found a medium interaction...
+            // TODO check for t > maxt? later...
+            active_medium = active;
+        }
+        else
+        {
+            // Closed form free-flight distance sampling
+            local_majorant = global_majorant_scalar;
+            desired_tau = -dr::log(1 - sampler.next_float32(active));
+            Float step_t = desired_tau / local_majorant;
+            dr::masked(running_t, active) = running_t + step_t;
+
+            // NOTE: transmittance weight added after loop!
+
+            // All active lanes have found a medium interaction...
+            // TODO check for t > maxt? later...
+            active_medium = active;
+        }
+
+        dr::masked(local_majorant, !active_medium) = dr::NaN<Float>;
+
+        //
+        // Handle medium interaction
+        //
+
+        // Stop if running_t beyond maxt
+        Mask valid_mei = active_medium && (running_t < maxt);
+        dr::masked(escaped, active_medium) |= !valid_mei;
+        dr::masked(active, active_medium) &= valid_mei;
+        active_medium &= valid_mei;
+
+        // Query scattering coefficients at current interaction
+        dr::masked(mei.t, active_medium) = running_t;
+        dr::masked(mei.p, active_medium) = ray(running_t);
+        auto [ current_sigma_s, current_sigma_n, current_sigma_t ] = get_scattering_coefficients(mei, active_medium);
+        dr::masked(mei.sigma_s, active_medium) = current_sigma_s;
+        dr::masked(mei.sigma_n, active_medium) = current_sigma_n;
+        dr::masked(mei.sigma_t, active_medium) = current_sigma_t;
+
+        // Accumulate ratio-tracking weights
+        dr::masked(weight, active_medium) *= mei.sigma_n / local_majorant;
+    }
+
+    if (!has_supergrid)
+    {
+        // Transmittance weight for spatially homogeneous majorant.
+        // TODO skip for spectrally homogeneous majorant!
+        Float step_t = mei.t - mint; // NOT mei.mint!
+        weight *= dr::select(escaped, 0, dr::exp(-step_t * (global_majorant_spectral - global_majorant_scalar)));
+    }
+
+    return { weight, sampler };
+}
+
+MI_VARIANT
 std::pair<typename Medium<Float, Spectrum>::UnpolarizedSpectrum,
           typename Medium<Float, Spectrum>::UnpolarizedSpectrum>
 Medium<Float, Spectrum>::eval_tr_and_pdf(const MediumInteraction3f &mei,

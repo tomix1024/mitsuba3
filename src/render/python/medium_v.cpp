@@ -87,6 +87,10 @@ template <typename Ptr, typename Cls> void bind_medium_generic(Cls &cls) {
             [](Ptr ptr, const Ray3f &ray, PCG32<UInt32> sampler, UInt32 channel, Mask active) {
                 return ptr->sample_interaction_drrt(ray, sampler, channel, active); },
             "ray"_a, "sampler"_a, "channel"_a, "active"_a)
+        .def("estimate_transmittance",
+            [](Ptr ptr, const Ray3f &ray, PCG32<UInt32> sampler, UInt32 channel, Mask active) {
+                return ptr->estimate_transmittance(ray, sampler, channel, active); },
+            "ray"_a, "sampler"_a, "channel"_a, "active"_a)
        .def("eval_tr_and_pdf",
             [](Ptr ptr, const MediumInteraction3f &mi,
                const SurfaceInteraction3f &si, Mask active) {

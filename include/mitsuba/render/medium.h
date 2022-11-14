@@ -105,6 +105,13 @@ public:
                             Mask active) const;
 
     /**
+     * Estimates the transmittance along a ray inside of the medium using ratio tracking and DDA traversal.
+     */
+    std::pair<Spectrum, PCG32<UInt32>>
+    estimate_transmittance(const Ray3f &ray, PCG32<UInt32> sampler, UInt32 channel,
+                            Mask active) const;
+
+    /**
      * \brief Compute the transmittance and PDF
      *
      * This function evaluates the transmittance and PDF of sampling a certain
@@ -247,6 +254,7 @@ DRJIT_VCALL_TEMPLATE_BEGIN(mitsuba::Medium)
     DRJIT_VCALL_METHOD(sample_interaction_real)
     DRJIT_VCALL_METHOD(sample_interaction_drt)
     DRJIT_VCALL_METHOD(sample_interaction_drrt)
+    DRJIT_VCALL_METHOD(estimate_transmittance)
     DRJIT_VCALL_METHOD(eval_tr_and_pdf)
     DRJIT_VCALL_METHOD(prepare_interaction_sampling)
 DRJIT_VCALL_TEMPLATE_END(mitsuba::Medium)
