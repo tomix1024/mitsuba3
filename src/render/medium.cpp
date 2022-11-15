@@ -213,7 +213,6 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
         {
             // Closed form free-flight distance sampling
             local_majorant = global_majorant_scalar;
-            desired_tau = -dr::log(1 - sampler.next_float32(active));
             Float step_t = desired_tau / local_majorant;
             dr::masked(running_t, active) = running_t + step_t;
 
@@ -266,8 +265,8 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
     {
         // Transmittance weight for spatially homogeneous majorant.
         // TODO skip for spectrally homogeneous majorant!
-        Float step_t = mei.t - mint; // NOT mei.mint!
-        weight *= dr::select(escaped, 0, dr::exp(-step_t * (global_majorant_spectral - global_majorant_scalar)));
+        Float step_t = dr::select(escaped, maxt, mei.t) - mint; // NOT mei.mint!
+        weight *= dr::exp(-step_t * (global_majorant_spectral - global_majorant_scalar));
     }
 
     dr::masked(mei.t, escaped) = dr::Infinity<Float>;
@@ -619,7 +618,6 @@ Medium<Float, Spectrum>::estimate_transmittance(const Ray3f &ray, PCG32<UInt32> 
         {
             // Closed form free-flight distance sampling
             local_majorant = global_majorant_scalar;
-            desired_tau = -dr::log(1 - sampler.next_float32(active));
             Float step_t = desired_tau / local_majorant;
             dr::masked(running_t, active) = running_t + step_t;
 
@@ -658,8 +656,8 @@ Medium<Float, Spectrum>::estimate_transmittance(const Ray3f &ray, PCG32<UInt32> 
     {
         // Transmittance weight for spatially homogeneous majorant.
         // TODO skip for spectrally homogeneous majorant!
-        Float step_t = mei.t - mint; // NOT mei.mint!
-        weight *= dr::select(escaped, 0, dr::exp(-step_t * (global_majorant_spectral - global_majorant_scalar)));
+        Float step_t = dr::select(escaped, maxt, mei.t) - mint; // NOT mei.mint!
+        weight *= dr::exp(-step_t * (global_majorant_spectral - global_majorant_scalar));
     }
 
     return { weight, sampler };
