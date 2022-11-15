@@ -188,7 +188,7 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
 
                 // For rays that will stop within this cell, figure out
                 // the precise `t` parameter where `desired_tau` is reached.
-                Float t_precise = dr::select(majorant > 0, running_t + (desired_tau - tau_acc) / majorant, t_next);
+                Float t_precise = dr::select(local_majorant > 0, running_t + (desired_tau - tau_acc) / local_majorant, t_next);
                 Mask reached_dda = active_dda && (t_precise < maxt) && (tau_next >= desired_tau);
                 Mask escaped_dda = active_dda && (t_precise >= maxt);
                 dr::masked(running_t, active_dda) = dr::select(reached_dda || escaped_dda, t_precise, t_next);
@@ -245,7 +245,8 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
         dr::masked(mei.sigma_t, active_medium) = current_sigma_t;
 
         // Determine whether it was a real or null interaction
-        Float scatter_prob = extract_channel(mei.sigma_t, channel) / local_majorant;
+        Float scatter_prob = dr::select(local_majorant > 0, extract_channel(mei.sigma_t, channel) / local_majorant, 0);
+        // NOTE: random number can be exactly zero!
         Mask did_null_scatter = active_medium && (sampler.next_float32(active_medium) >= scatter_prob);
 
         // TODO only relevant for spectrally varying media, otherwise trivially 1!
@@ -271,6 +272,8 @@ Medium<Float, Spectrum>::sample_interaction_real(const Ray3f &ray,
 
     dr::masked(mei.t, escaped) = dr::Infinity<Float>;
     mei.p                      = ray(mei.t);
+
+    mei.combined_extinction = dr::detach(m_majorant_grid->eval_1(mei, mei.is_valid()));
 
     // NOTE: weight is missing final sigma_t factor for valid mei!
     return { mei, weight, sampler };
