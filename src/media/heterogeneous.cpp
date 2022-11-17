@@ -286,10 +286,7 @@ public:
 
         auto sigmas = sigmat * m_albedo->eval(mei, active);
 
-        UnpolarizedSpectrum local_majorant =
-            (m_majorant_resolution_factor > 0)
-                ? m_majorant_grid->eval_1(mei, active)
-                : m_max_density;
+        UnpolarizedSpectrum local_majorant = get_majorant(mei, active);
         auto sigman = local_majorant - sigmat;
 
         return { sigmas, sigman, sigmat };
