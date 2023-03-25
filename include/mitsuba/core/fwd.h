@@ -181,6 +181,7 @@ template <typename Float_> struct CoreAliases {
     using Texture1f = dr::Texture<Float, 1>;
     using Texture2f = dr::Texture<Float, 2>;
     using Texture3f = dr::Texture<Float, 3>;
+    using Texture4f = dr::Texture<Float, 4>;
 
     /*
      * The following aliases are only used for casting to python object with PY_CAST_VARIANTS.
@@ -270,7 +271,8 @@ template <typename Float_> struct CoreAliases {
     using prefix ## TensorXf             = typename prefix ## CoreAliases::TensorXf;               \
     using prefix ## Texture1f            = typename prefix ## CoreAliases::Texture1f;              \
     using prefix ## Texture2f            = typename prefix ## CoreAliases::Texture2f;              \
-    using prefix ## Texture3f            = typename prefix ## CoreAliases::Texture3f;
+    using prefix ## Texture3f            = typename prefix ## CoreAliases::Texture3f;              \
+    using prefix ## Texture4f            = typename prefix ## CoreAliases::Texture4f;              \
 
 // Variadic macro to import a set of types from the base class
 #define __MI_USING_TYPES_MACRO__(x) using typename Base::x;
