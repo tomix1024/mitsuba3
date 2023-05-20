@@ -155,7 +155,8 @@ public:
                     *out_ptr = (ScalarFloat *) bitmap_2->data(),
                     *lum_ptr = (ScalarFloat *) luminance.get();
 
-        ScalarFloat theta_scale = 1.f / (bitmap->size().y() - 1) * dr::Pi<Float>;
+        // Top boundary of image should map to theta=0, bottom boundary should map to theta=π.
+        ScalarFloat theta_scale = 1.f / bitmap->size().y() * dr::Pi<Float>;
 
         /* "MIS Compensation: Optimizing Sampling Techniques in Multiple
            Importance Sampling" Ondrej Karlik, Martin Sik, Petr Vivoda, Tomas
@@ -186,7 +187,8 @@ public:
 
         size_t pixel_width = is_spectral_v<Spectrum> ? 4 : 3;
         for (size_t y = 0; y < bitmap->size().y(); ++y) {
-            ScalarFloat sin_theta = dr::sin(y * theta_scale);
+            // Compute sin_theta at pixel *center*.
+            ScalarFloat sin_theta = dr::sin((y+0.5f) * theta_scale);
 
             for (size_t x = 0; x < bitmap->size().x(); ++x) {
                 ScalarColor3f rgb = dr::load<ScalarVector3f>(in_ptr);
@@ -282,9 +284,11 @@ public:
             size_t pixel_width = is_spectral_v<Spectrum> ? 4 : 3;
             constexpr bool is_aligned = ScalarPixelData::Size == 4;
 
-            ScalarFloat theta_scale = 1.f / (res.y() - 1) * dr::Pi<Float>;
+            // Top boundary of image should map to theta=0, bottom boundary should map to theta=π.
+            ScalarFloat theta_scale = 1.f / res.y() * dr::Pi<Float>;
             for (size_t y = 0; y < res.y(); ++y) {
-                ScalarFloat sin_theta = dr::sin(y * theta_scale);
+                // Compute sin_theta at pixel *center*.
+                ScalarFloat sin_theta = dr::sin((y+0.5f) * theta_scale);
 
                 if constexpr (!dr::is_jit_v<Float>) {
                     // Enforce horizontal continuity
@@ -528,15 +532,23 @@ public:
 protected:
     UnpolarizedSpectrum eval_spectrum(Point2f uv, const Wavelength &wavelengths,
                                       Mask active, bool include_whitepoint = true) const {
-        ScalarVector2u res = { m_data.shape(1), m_data.shape(0) };
+        ScalarVector2u res = { m_data.shape(1), m_data.shape(0) },
+                        orig_res = { m_data.shape(1)-1, m_data.shape(0) };
 
-        uv.x() -= .5f / (res.x() - 1u);
-        uv -= dr::floor(uv);
-        uv *= Vector2f(res - 1u);
+        // Wrap in x, clamp in y...
+        // Map to pixel centers in in coords (before wrapping)
+        uv -= .5f / orig_res;
+        // Wrap uv coordinates to [0, 1] (only horizontally!)
+        uv.x() -= dr::floor(uv.x());
+        // Scale to integer pixel coordinates
+        uv *= orig_res;
 
-        Point2u pos = dr::minimum(Point2u(uv), res - 2u);
+        // Clamp coordinates
+        Point2u pos = Point2u(uv);
+        pos.x() = dr::minimum(pos.x(), res.x() - 2u);
+        pos.y() = dr::clamp(pos.y(), 0, res.y() - 2u);
 
-        Point2f w1 = uv - Point2f(pos),
+        Point2f w1 = dr::clamp(uv - Point2f(pos), 0.f, 1.f),
                 w0 = 1.f - w1;
 
         const uint32_t width = res.x();
