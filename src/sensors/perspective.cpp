@@ -260,20 +260,33 @@ public:
 
         // Convert into a normalized ray direction; adjust the ray interval accordingly.
         Vector3f d = dr::normalize(Vector3f(near_p));
+        Vector3f d_x = dr::normalize(Vector3f(near_p) + m_dx);
+        Vector3f d_y = dr::normalize(Vector3f(near_p) + m_dy);
 
+        // Camera position in world space
         ray.o = m_to_world.value().translation();
-        ray.d = m_to_world.value() * d;
+        ray.o_x = ray.o_y = ray.o;
 
+        // Ray direction in world space
+        ray.d = m_to_world.value() * d;
+        ray.d_x = m_to_world.value() * d_x;
+        ray.d_y = m_to_world.value() * d_y;
+
+        // Shift ray origin to near plane
         Float inv_z = dr::rcp(d.z());
         Float near_t = m_near_clip * inv_z,
               far_t  = m_far_clip * inv_z;
         ray.o += ray.d * near_t;
         ray.maxt = far_t - near_t;
 
-        ray.o_x = ray.o_y = ray.o;
+        // Shift differential ray origins to near plane
+        Float inv_z_x = dr::rcp(d_x.z());
+        Float near_t_x = m_near_clip * inv_z_x;
+        ray.o_x += ray.d_x * near_t_x;
+        Float inv_z_y = dr::rcp(d_y.z());
+        Float near_t_y = m_near_clip * inv_z_y;
+        ray.o_y += ray.d_y * near_t_y;
 
-        ray.d_x = m_to_world.value() * dr::normalize(Vector3f(near_p) + m_dx);
-        ray.d_y = m_to_world.value() * dr::normalize(Vector3f(near_p) + m_dy);
         ray.has_differentials = true;
 
         return { ray, wav_weight };
