@@ -113,6 +113,8 @@ MI_VARIANT SamplingIntegrator<Float, Spectrum>::SamplingIntegrator(const Propert
                   "Please leave it undefined; Mitsuba will then automatically "
                   "choose the necessary number of passes.");
     }
+
+    m_ray_differential_scale = props.get<float>("ray_differential_scale", -1.0f);
 }
 
 MI_VARIANT SamplingIntegrator<Float, Spectrum>::~SamplingIntegrator() { }
@@ -310,7 +312,7 @@ SamplingIntegrator<Float, Spectrum>::render(Scene *scene,
         pos += film->crop_offset();
 
         // Scale factor that will be applied to ray differentials
-        ScalarFloat diff_scale_factor = dr::rsqrt((ScalarFloat) spp);
+        ScalarFloat diff_scale_factor = m_ray_differential_scale >= 0 ? ScalarFloat(m_ray_differential_scale) : dr::rsqrt((ScalarFloat) spp);
 
         Timer timer;
         std::unique_ptr<Float[]> aovs(new Float[n_channels]);
@@ -383,7 +385,7 @@ MI_VARIANT void SamplingIntegrator<Float, Spectrum>::render_block(const Scene *s
         seed += block_id * pixel_count;
 
         // Scale down ray differentials when tracing multiple rays per pixel
-        Float diff_scale_factor = dr::rsqrt((Float) sample_count);
+        Float diff_scale_factor = m_ray_differential_scale >= 0 ? Float(m_ray_differential_scale) : dr::rsqrt((Float) sample_count);
 
         // Clear block (it's being reused)
         block->clear();
