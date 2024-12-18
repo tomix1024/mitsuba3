@@ -265,7 +265,8 @@ public:
 
         // Camera position in world space
         ray.o = m_to_world.value().translation();
-        ray.o_x = ray.o_y = ray.o;
+        ray.o_x = Vector3f(ray.o);
+        ray.o_y = Vector3f(ray.o);
 
         // Ray direction in world space
         ray.d = m_to_world.value() * d;
