@@ -546,9 +546,9 @@ protected:
         // Clamp coordinates
         Point2u pos = Point2u(uv);
         pos.x() = dr::minimum(pos.x(), res.x() - 2u);
-        pos.y() = dr::clamp(pos.y(), 0, res.y() - 2u);
+        pos.y() = dr::clip(pos.y(), 0, res.y() - 2u);
 
-        Point2f w1 = dr::clamp(uv - Point2f(pos), 0.f, 1.f),
+        Point2f w1 = dr::clip(uv - Point2f(pos), 0.f, 1.f),
                 w0 = 1.f - w1;
 
         const uint32_t width = res.x();
